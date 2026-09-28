@@ -23,5 +23,5 @@ tr.click{cursor:pointer}
 .msg{color:#c62828}.pg{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
 @media(max-width:700px){table,tbody,tr,td{display:block}thead{display:none}tr{border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;padding:6px}
 td{border:0;padding:3px 6px}td::before{content:attr(data-l)": ";font-weight:600;color:#667}}
-@media(min-width:900px){.grid{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:900px){.grid{grid-template-columns:repeat(5,1fr)}}
 @media print{.top,.side,.fab,.btn,.row input,.row select{display:none!important}}

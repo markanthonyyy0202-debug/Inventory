@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sb } from '../lib/supabase';
 
-const MOVES = ['Site → Office', 'Office → Site', 'Site → Site', 'Office → Office', 'Received', 'Issued', 'Returned', 'Adjustment'];
+const MOVES = ['Site → Store', 'Store → Site', 'Site → Warehouse', 'Warehouse → Site', 'Office → Site', 'Site → Office', 'Received', 'Issued', 'Returned', 'Adjustment'];
 const NOFROM = ['Received', 'Returned', 'Adjustment'];
 const today = () => new Date().toISOString().slice(0, 10);
 const fmt = d => new Date(d + 'T00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
@@ -56,9 +56,9 @@ function Main({ name, setName }) {
   const L = useMemo(() => Object.fromEntries(d.l.map(x => [x.id, x])), [d.l]);
   const rows = useMemo(() => d.t.map(r => ({ ...r, mat: M[r.material_id]?.material_name || '?', from: L[r.from_location]?.location_name || '—', to: L[r.to_location]?.location_name || '—', user: r.created_by_name || '—' })), [d.t, M, L]);
   const stock = useMemo(() => d.m.map(m => {
-    const g = t => d.b.filter(x => x.material_id === m.id && (t === 'Other' ? !['Site', 'Office', 'Warehouse'].includes(L[x.location_id]?.type) : L[x.location_id]?.type === t)).reduce((a, x) => a + Number(x.qty), 0);
-    const o = { name: m.material_name, Site: g('Site'), Office: g('Office'), Warehouse: g('Warehouse'), Other: g('Other') };
-    return { ...o, total: o.Site + o.Office + o.Warehouse + o.Other };
+    const g = t => d.b.filter(x => x.material_id === m.id && (t === 'Other' ? !['Site', 'Office', 'Warehouse', 'Store'].includes(L[x.location_id]?.type) : L[x.location_id]?.type === t)).reduce((a, x) => a + Number(x.qty), 0);
+    const o = { name: m.material_name, Site: g('Site'), Office: g('Office'), Warehouse: g('Warehouse'), Store: g('Store'), Other: g('Other') };
+    return { ...o, total: o.Site + o.Office + o.Warehouse + o.Store + o.Other };
   }), [d.m, d.b, L]);
   const notify = t => { setToast(t); setTimeout(() => setToast(''), 3000); };
   const del = async r => { if (!confirm(`Delete transaction #${r.id} (${r.quantity} × ${r.mat})? This cannot be undone.`)) return; const { error } = await sb.rpc('delete_tx', { tx_id: r.id, who: name }); error ? alert(error.message) : notify('Record deleted.'); load(); };
@@ -87,7 +87,7 @@ function Main({ name, setName }) {
 
 function Dash({ stock, rows }) {
   const S = k => stock.reduce((a, x) => a + x[k], 0);
-  const cards = [['Total Inventory', S('total')], ['Site Inventory', S('Site')], ['Office Inventory', S('Office')], ['Warehouse Inventory', S('Warehouse')]];
+  const cards = [['Total Inventory', S('total')], ['Site Inventory', S('Site')], ['Office Inventory', S('Office')], ['Warehouse Inventory', S('Warehouse')], ['Store Inventory', S('Store')]];
   return <>
     <div className="grid">{cards.map(([n, q]) => <div className="card" key={n}><small>{n}</small><h2>{q}</h2></div>)}</div>
     <div className="card"><h3>Recent Transactions</h3>
@@ -95,8 +95,8 @@ function Dash({ stock, rows }) {
         {rows.slice(0, 8).map(r => <tr key={r.id}><td data-l="Date">{fmt(r.transaction_date)}</td><td data-l="Material">{r.mat}</td><td data-l="Qty">{r.quantity}</td><td data-l="Movement">{r.movement}</td><td data-l="Location">{r.to !== '—' ? r.to : r.from}</td><td data-l="By">{r.user}</td></tr>)}</tbody></table></div>
     <div className="card"><h3>Stock by Location</h3><StockTbl stock={stock} /></div></>;
 }
-const StockTbl = ({ stock }) => <table><thead><tr><th>Material</th><th>Site</th><th>Office</th><th>Warehouse</th><th>Other</th><th>Total</th></tr></thead><tbody>
-  {stock.map(s => <tr key={s.name}><td data-l="Material">{s.name}</td><td data-l="Site">{s.Site}</td><td data-l="Office">{s.Office}</td><td data-l="Warehouse">{s.Warehouse}</td><td data-l="Other">{s.Other}</td><td data-l="Total"><b>{s.total}</b></td></tr>)}</tbody></table>;
+const StockTbl = ({ stock }) => <table><thead><tr><th>Material</th><th>Site</th><th>Office</th><th>Warehouse</th><th>Store</th><th>Other</th><th>Total</th></tr></thead><tbody>
+  {stock.map(s => <tr key={s.name}><td data-l="Material">{s.name}</td><td data-l="Site">{s.Site}</td><td data-l="Office">{s.Office}</td><td data-l="Warehouse">{s.Warehouse}</td><td data-l="Store">{s.Store}</td><td data-l="Other">{s.Other}</td><td data-l="Total"><b>{s.total}</b></td></tr>)}</tbody></table>;
 
 function Tbl({ rows, hist, admin, onEdit, onDel, d, name }) {
   const [q, setQ] = useState(''), [f, setF] = useState({ mat: '', loc: '', user: '', mv: '', a: '', b: '' }), [so, setSo] = useState({ k: 'transaction_date', dir: -1 }), [pg, setPg] = useState(0), [sel, setSel] = useState(null);
@@ -185,8 +185,8 @@ function Rep({ rows, d, stock }) {
   if (k === 'monthly') out = rows.filter(r => r.transaction_date.startsWith(mo));
   if (k === 'material') out = rows.filter(r => String(r.material_id) === mid);
   const stk = k === 'stock';
-  const head = stk ? ['Material', 'Site', 'Office', 'Warehouse', 'Other', 'Total'] : ['Date', 'Material', 'Qty', 'Movement', 'From', 'To', 'User', 'Remarks'];
-  const body = stk ? stock.map(s => [s.name, s.Site, s.Office, s.Warehouse, s.Other, s.total]) : out.map(r => [fmt(r.transaction_date), r.mat, r.quantity, r.movement, r.from, r.to, r.user, r.remarks || '']);
+  const head = stk ? ['Material', 'Site', 'Office', 'Warehouse', 'Store', 'Other', 'Total'] : ['Date', 'Material', 'Qty', 'Movement', 'From', 'To', 'User', 'Remarks'];
+  const body = stk ? stock.map(s => [s.name, s.Site, s.Office, s.Warehouse, s.Store, s.Other, s.total]) : out.map(r => [fmt(r.transaction_date), r.mat, r.quantity, r.movement, r.from, r.to, r.user, r.remarks || '']);
   return <div className="card"><h3>Reports</h3>
     <div className="row"><select value={k} onChange={e => setK(e.target.value)}><option value="daily">Daily</option><option value="weekly">Weekly (7 days from date)</option><option value="monthly">Monthly</option><option value="material">Material</option><option value="stock">Site vs Office (current)</option></select>
       {(k === 'daily' || k === 'weekly') && <input type="date" value={dt} onChange={e => setDt(e.target.value)} />}
@@ -212,7 +212,7 @@ function Set({ d, load, notify }) {
     <button className="btn" onClick={() => { navigator.clipboard?.writeText(url); notify('System link copied.'); }}>Copy link</button>
     <a className="btn" style={{ textAlign: 'center', textDecoration: 'none' }} target="_blank" href={'https://wa.me/?text=' + encodeURIComponent('Please use this link to update the site inventory:\n' + url)}>Share via WhatsApp</a></div></div>
     <div className="card"><h3>Locations</h3><form className="row" onSubmit={add}><input placeholder="Location name" value={n} onChange={e => setN(e.target.value)} required />
-      <select value={t} onChange={e => setT(e.target.value)}>{['Site', 'Office', 'Warehouse', 'Other'].map(x => <option key={x}>{x}</option>)}</select><button className="btn">Add</button></form>
+      <select value={t} onChange={e => setT(e.target.value)}>{['Site', 'Office', 'Warehouse', 'Store', 'Other'].map(x => <option key={x}>{x}</option>)}</select><button className="btn">Add</button></form>
       <table><thead><tr><th>Name</th><th>Type</th><th>Status</th></tr></thead><tbody>{d.l.map(l => <tr key={l.id}><td data-l="Name">{l.location_name}</td><td data-l="Type">{l.type}</td>
         <td><button className="btn sm alt" onClick={async () => { await sb.from('locations').update({ active: !l.active }).eq('id', l.id); load(); }}>{l.active ? 'Active — disable' : 'Disabled — enable'}</button></td></tr>)}</tbody></table></div></>;
 }
