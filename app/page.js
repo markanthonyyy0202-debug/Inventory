@@ -7,6 +7,7 @@ import autoTable from 'jspdf-autotable';
 import { sb } from '../lib/supabase';
 
 const STATUS = ['Released', 'Defective'];
+const DESC = ['DEFECTIVE', 'IN USE', 'IN STOCK'];
 const today = () => new Date().toISOString().slice(0, 10);
 const fmt = d => new Date(d + 'T00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
 const tm = s => new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -78,13 +79,13 @@ function Main({ name, setName }) {
   </>;
 }
 
-const COLS = [['transaction_date', 'Date', r => fmt(r.transaction_date)], ['mat', 'Material'], ['quantity', 'Qty'], ['work_order', 'Work Order'], ['location', 'Location'], ['status', 'Status'], ['remarks', 'Remarks'], ['user', 'Added By'], ['created_at', 'Time', r => tm(r.created_at)]];
+const COLS = [['transaction_date', 'Date', r => fmt(r.transaction_date)], ['mat', 'Material'], ['item_description', 'Item Description'], ['quantity', 'Qty'], ['work_order', 'Work Order'], ['location', 'Location'], ['status', 'Status'], ['remarks', 'Remarks'], ['user', 'Added By'], ['created_at', 'Time', r => tm(r.created_at)]];
 
 function Dash({ stock, rows }) {
   const S = k => stock.reduce((a, x) => a + x[k], 0);
   return <>
     <div className="grid">{[['Total Quantity', S('total')], ['Released', S('Released')], ['Defective', S('Defective')]].map(([n, q]) => <div className="card" key={n}><small>{n}</small><h2>{q}</h2></div>)}</div>
-    <div className="card"><h3>Recent Records</h3><Table cols={COLS.slice(0, 6).concat([COLS[7]])} rows={rows.slice(0, 8)} /></div>
+    <div className="card"><h3>Recent Records</h3><Table cols={COLS.slice(0, 7).concat([COLS[8]])} rows={rows.slice(0, 8)} /></div>
     <div className="card"><h3>By Material</h3><table><thead><tr><th>Material</th><th>Released</th><th>Defective</th><th>Total</th></tr></thead><tbody>
       {stock.map(s => <tr key={s.name}><td data-l="Material">{s.name}</td><td data-l="Released">{s.Released}</td><td data-l="Defective">{s.Defective}</td><td data-l="Total"><b>{s.total}</b></td></tr>)}</tbody></table></div></>;
 }
@@ -95,7 +96,7 @@ function Tbl({ rows, onEdit, onDel, d }) {
   const [q, setQ] = useState(''), [f, setF] = useState({ mat: '', st: '', user: '', a: '', b: '' }), [so, setSo] = useState({ k: 'transaction_date', dir: -1 }), [pg, setPg] = useState(0), [sel, setSel] = useState(null);
   const list = useMemo(() => {
     const t = q.toLowerCase();
-    return rows.filter(r => (!t || [fmt(r.transaction_date), r.mat, r.work_order, r.location, r.status, r.user, r.remarks].join(' ').toLowerCase().includes(t))
+    return rows.filter(r => (!t || [fmt(r.transaction_date), r.mat, r.item_description, r.work_order, r.location, r.status, r.user, r.remarks].join(' ').toLowerCase().includes(t))
       && (!f.mat || r.mat === f.mat) && (!f.st || r.status === f.st) && (!f.user || r.user === f.user) && (!f.a || r.transaction_date >= f.a) && (!f.b || r.transaction_date <= f.b))
       .sort((x, y) => (x[so.k] > y[so.k] ? 1 : x[so.k] < y[so.k] ? -1 : 0) * so.dir);
   }, [rows, q, f, so]);
@@ -113,20 +114,21 @@ function Tbl({ rows, onEdit, onDel, d }) {
     {!cur.length && <p>No records found.</p>}
     <div className="pg"><button className="btn sm alt" disabled={pg === 0} onClick={() => setPg(pg - 1)}>◀ Prev</button><span>Page {pg + 1} / {pages} · {list.length} records</span><button className="btn sm alt" disabled={pg + 1 >= pages} onClick={() => setPg(pg + 1)}>Next ▶</button></div>
     {sel && <Modal><h3>Record #{sel.id}</h3>
-      {[['Date', fmt(sel.transaction_date)], ['Material', sel.mat], ['Quantity', sel.quantity], ['Work Order', sel.work_order || '—'], ['Location', sel.location || '—'], ['Status', sel.status], ['Remarks', sel.remarks || '—'], ['Added by', sel.user], ['Added', new Date(sel.created_at).toLocaleString()], ['Last updated', new Date(sel.updated_at).toLocaleString()]].map(([k, x]) => <p key={k}><b>{k}:</b> {x}</p>)}
+      {[['Date', fmt(sel.transaction_date)], ['Material', sel.mat], ['Item Description', sel.item_description || '—'], ['Quantity', sel.quantity], ['Work Order', sel.work_order || '—'], ['Location', sel.location || '—'], ['Status', sel.status], ['Remarks', sel.remarks || '—'], ['Added by', sel.user], ['Added', new Date(sel.created_at).toLocaleString()], ['Last updated', new Date(sel.updated_at).toLocaleString()]].map(([k, x]) => <p key={k}><b>{k}:</b> {x}</p>)}
       <div className="row"><button className="btn" onClick={() => { onEdit(sel); setSel(null); }}>Edit</button><button className="btn red" onClick={() => { onDel(sel); setSel(null); }}>Delete</button><button className="btn alt" onClick={() => setSel(null)}>Close</button></div></Modal>}
   </div>;
 }
 
 function Form({ init, d, done, cancel, notify, name }) {
-  const [f, setF] = useState({ transaction_date: today(), material_id: '', quantity: '', work_order: '', location: '', status: 'Released', remarks: '', ...init }), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const [f, setF] = useState({ transaction_date: today(), material_id: '', item_description: '', quantity: '', work_order: '', location: '', status: 'Released', remarks: '', ...init }), [busy, setBusy] = useState(false), [err, setErr] = useState('');
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const go = async e => {
     e.preventDefault(); setErr(''); const q = Number(f.quantity);
     if (!f.material_id) return setErr('Select a material.');
+    if (!f.item_description) return setErr('Select an item description.');
     if (!(q > 0)) return setErr('Quantity must be greater than 0.');
     setBusy(true);
-    const row = { transaction_date: f.transaction_date, material_id: +f.material_id, quantity: q, work_order: f.work_order?.trim() || null, location: f.location.trim(), status: f.status, remarks: f.remarks || null, updated_by_name: name };
+    const row = { transaction_date: f.transaction_date, material_id: +f.material_id, quantity: q, item_description: f.item_description, work_order: f.work_order?.trim() || null, location: f.location.trim(), status: f.status, remarks: f.remarks || null, updated_by_name: name };
     const { error } = f.id ? await sb.from('inventory_transactions').update(row).eq('id', f.id) : await sb.from('inventory_transactions').insert({ ...row, created_by_name: name });
     setBusy(false); if (error) return setErr(error.message);
     notify(f.id ? 'Inventory updated.' : 'Inventory successfully added.'); done();
@@ -134,6 +136,7 @@ function Form({ init, d, done, cancel, notify, name }) {
   return <Modal><form onSubmit={go}><h3>{f.id ? `Edit #${f.id}` : 'Add Inventory'}</h3>
     <label>Date</label><input type="date" value={f.transaction_date} onChange={e => set('transaction_date', e.target.value)} required />
     <label>Materials</label><select value={f.material_id} onChange={e => set('material_id', e.target.value)} required><option value="">Select…</option>{d.m.map(m => <option key={m.id} value={m.id}>{m.material_name}</option>)}</select>
+    <label>Item Description</label><select value={f.item_description || ''} onChange={e => set('item_description', e.target.value)} required><option value="">Select…</option>{DESC.map(x => <option key={x}>{x}</option>)}</select>
     <label>Quantity</label><input type="number" inputMode="decimal" step="any" value={f.quantity} onChange={e => set('quantity', e.target.value)} required />
     <label>Work Order</label><input value={f.work_order || ''} onChange={e => set('work_order', e.target.value)} />
     <label>Location</label><input value={f.location || ''} onChange={e => set('location', e.target.value)} placeholder="Type the location" required />
@@ -151,8 +154,8 @@ function Rep({ rows, d, stock }) {
   if (k === 'monthly') out = rows.filter(r => r.transaction_date.startsWith(mo));
   if (k === 'material') out = rows.filter(r => String(r.material_id) === mid);
   const sm = k === 'summary';
-  const head = sm ? ['Material', 'Released', 'Defective', 'Total'] : ['Date', 'Material', 'Qty', 'Work Order', 'Location', 'Status', 'User', 'Remarks'];
-  const body = sm ? stock.map(s => [s.name, s.Released, s.Defective, s.total]) : out.map(r => [fmt(r.transaction_date), r.mat, r.quantity, r.work_order || '', r.location || '', r.status, r.user, r.remarks || '']);
+  const head = sm ? ['Material', 'Released', 'Defective', 'Total'] : ['Date', 'Material', 'Item Description', 'Qty', 'Work Order', 'Location', 'Status', 'User', 'Remarks'];
+  const body = sm ? stock.map(s => [s.name, s.Released, s.Defective, s.total]) : out.map(r => [fmt(r.transaction_date), r.mat, r.item_description || '', r.quantity, r.work_order || '', r.location || '', r.status, r.user, r.remarks || '']);
   return <div className="card"><h3>Reports</h3>
     <div className="row"><select value={k} onChange={e => setK(e.target.value)}><option value="daily">Daily</option><option value="weekly">Weekly (7 days from date)</option><option value="monthly">Monthly</option><option value="material">Material</option><option value="summary">Summary by material</option></select>
       {(k === 'daily' || k === 'weekly') && <input type="date" value={dt} onChange={e => setDt(e.target.value)} />}
