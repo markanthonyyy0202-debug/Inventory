@@ -109,8 +109,8 @@ function Tbl({ rows, onEdit, onDel, d }) {
       <select value={f.user} onChange={e => sf('user', e.target.value)}><option value="">All users</option>{[...new Set(rows.map(r => r.user))].map(u => <option key={u}>{u}</option>)}</select>
       <input type="date" value={f.a} onChange={e => sf('a', e.target.value)} /><input type="date" value={f.b} onChange={e => sf('b', e.target.value)} /></div>
     <Exp name="Inventory" head={COLS.map(c => c[1])} body={list.map(r => COLS.map(c => c[2] ? c[2](r) : r[c[0]] ?? ''))} />
-    <table><thead><tr>{COLS.map(c => <th key={c[0]} onClick={() => setSo({ k: c[0], dir: so.k === c[0] ? -so.dir : 1 })}>{c[1]}{so.k === c[0] ? (so.dir > 0 ? ' ▲' : ' ▼') : ''}</th>)}</tr></thead>
-      <tbody>{cur.map(r => <tr key={r.id} className="click" onClick={() => setSel(r)}>{COLS.map(c => <td key={c[0]} data-l={c[1]}>{c[2] ? c[2](r) : r[c[0]]}</td>)}</tr>)}</tbody></table>
+    <table><thead><tr>{COLS.map(c => <th key={c[0]} onClick={() => setSo({ k: c[0], dir: so.k === c[0] ? -so.dir : 1 })}>{c[1]}{so.k === c[0] ? (so.dir > 0 ? ' ▲' : ' ▼') : ''}</th>)}<th>Actions</th></tr></thead>
+      <tbody>{cur.map(r => <tr key={r.id} className="click" onClick={() => setSel(r)}>{COLS.map(c => <td key={c[0]} data-l={c[1]}>{c[2] ? c[2](r) : r[c[0]]}</td>)}<td data-l="Actions"><div style={{ display: 'flex', gap: 6 }}><button className="btn sm" onClick={e => { e.stopPropagation(); onEdit(r); }}>Edit</button><button className="btn sm red" onClick={e => { e.stopPropagation(); onDel(r); }}>Delete</button></div></td></tr>)}</tbody></table>
     {!cur.length && <p>No records found.</p>}
     <div className="pg"><button className="btn sm alt" disabled={pg === 0} onClick={() => setPg(pg - 1)}>◀ Prev</button><span>Page {pg + 1} / {pages} · {list.length} records</span><button className="btn sm alt" disabled={pg + 1 >= pages} onClick={() => setPg(pg + 1)}>Next ▶</button></div>
     {sel && <Modal><h3>Record #{sel.id}</h3>
