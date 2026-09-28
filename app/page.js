@@ -125,10 +125,10 @@ function Form({ init, d, done, cancel, notify, name }) {
   const go = async e => {
     e.preventDefault(); setErr(''); const q = Number(f.quantity);
     if (!f.material_id) return setErr('Select a material.');
-    if (!DESC.includes(f.item_description)) return setErr('Please pick the item description from the list.');
+    if (!f.item_description?.trim()) return setErr('Enter an item description.');
     if (!(q > 0)) return setErr('Quantity must be greater than 0.');
     setBusy(true);
-    const row = { transaction_date: f.transaction_date, material_id: +f.material_id, quantity: q, item_description: f.item_description, work_order: f.work_order?.trim() || null, location: f.location.trim(), status: f.status, remarks: f.remarks || null, updated_by_name: name };
+    const row = { transaction_date: f.transaction_date, material_id: +f.material_id, quantity: q, item_description: f.item_description.trim(), work_order: f.work_order?.trim() || null, location: f.location.trim(), status: f.status, remarks: f.remarks || null, updated_by_name: name };
     const { error } = f.id ? await sb.from('inventory_transactions').update(row).eq('id', f.id) : await sb.from('inventory_transactions').insert({ ...row, created_by_name: name });
     setBusy(false); if (error) return setErr(error.message);
     notify(f.id ? 'Inventory updated.' : 'Inventory successfully added.'); done();
@@ -136,7 +136,7 @@ function Form({ init, d, done, cancel, notify, name }) {
   return <Modal><form onSubmit={go}><h3>{f.id ? `Edit #${f.id}` : 'Add Inventory'}</h3>
     <label>Date</label><input type="date" value={f.transaction_date} onChange={e => set('transaction_date', e.target.value)} required />
     <label>Materials</label><select value={f.material_id} onChange={e => set('material_id', e.target.value)} required><option value="">Select…</option>{d.m.map(m => <option key={m.id} value={m.id}>{m.material_name}</option>)}</select>
-    <label>Item Description</label><input list="dl" value={f.item_description || ''} onChange={e => set('item_description', e.target.value)} placeholder="Tap and search, then pick from the list" required /><datalist id="dl">{DESC.map(x => <option key={x} value={x} />)}</datalist>
+    <label>Item Description</label><input list="dl" value={f.item_description || ''} onChange={e => set('item_description', e.target.value)} placeholder="Search the list, or type a new item" required /><datalist id="dl">{DESC.map(x => <option key={x} value={x} />)}</datalist>
     <label>Quantity</label><input type="number" inputMode="decimal" step="any" value={f.quantity} onChange={e => set('quantity', e.target.value)} required />
     <label>Work Order</label><input value={f.work_order || ''} onChange={e => set('work_order', e.target.value)} />
     <label>Location</label><input value={f.location || ''} onChange={e => set('location', e.target.value)} placeholder="Type the location" required />
