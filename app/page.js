@@ -5,28 +5,30 @@ import { autoStatus, buildReport, STATUSES } from '@/lib/report';
 import Nav from './Nav';
 
 const todayStr = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-const blank = () => ({ location: '', date: todayStr(), wo: '', by: '', fault: '', finding: '', cat: '', acts: [], rca: '', rcaOther: '', remarks: '', statusMode: 'auto' });
+const blank = () => ({ location: '', date: todayStr(), wo: '', by: '', fault: '', finding: '', cat: '', acts: [], rcaCat: '', rca: '', rcaOther: '', remarks: '', statusMode: 'auto' });
 
 export default function Home() {
   const [cats, setCats] = useState([]);
-  const [rcas, setRcas] = useState([]);
   const [f, setF] = useState(blank());
   const [out, setOut] = useState('');
   const [errs, setErrs] = useState([]);
   const [toast, setToast] = useState('');
+  const [actQ, setActQ] = useState('');
+  const [rcaQ, setRcaQ] = useState('');
 
   useEffect(() => {
     supabase.from('action_categories').select('*').order('sort').then(({ data }) => setCats(data || []));
-    supabase.from('rcas').select('*').order('created_at').then(({ data }) => setRcas(data || []));
   }, []);
 
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const cat = cats.find((x) => x.name === f.cat);
+  const rcaCat = cats.find((x) => x.name === f.rcaCat);
   const rcaFinal = f.rca === 'Other' ? f.rcaOther.trim() : f.rca;
   const suggested = useMemo(() => autoStatus(f.acts, rcaFinal), [f.acts, rcaFinal]);
   const status = f.statusMode === 'auto' ? suggested : f.statusMode;
 
-  const pickCat = (name) => setF((p) => ({ ...p, cat: name, acts: [] }));
+  const pickCat = (name) => { setActQ(''); setRcaQ(''); setF((p) => ({ ...p, cat: name, acts: [], rcaCat: p.rcaCat || name })); };
+  const pickRcaCat = (name) => { setRcaQ(''); setF((p) => ({ ...p, rcaCat: name, rca: '', rcaOther: '' })); };
   const toggle = (a) => setF((p) => ({ ...p, acts: p.acts.includes(a) ? p.acts.filter((x) => x !== a) : [...p.acts, a] }));
   const say = (t) => { setToast(t); setTimeout(() => setToast(''), 2200); };
 
@@ -84,8 +86,13 @@ export default function Home() {
           </div>
           {!cat && <p className="hint">Select a category, then tick only what was actually done.</p>}
           {cat && !cat.actions.length && <p className="hint">No actions added for this category yet.</p>}
+          {cat && cat.actions.length > 0 && (
+            <input className="search" type="search" placeholder="Search actions..." aria-label="Search actions" value={actQ} onChange={(e) => setActQ(e.target.value)} />
+          )}
+          {f.acts.length > 0 && <p className="hint">{f.acts.length} action(s) ticked</p>}
+          {cat && actQ && !cat.actions.some((a) => a.toLowerCase().includes(actQ.toLowerCase())) && <p className="hint">No actions match your search.</p>}
           <div className="checks">
-            {cat?.actions.map((a) => (
+            {(cat?.actions || []).filter((a) => a.toLowerCase().includes(actQ.toLowerCase())).map((a) => (
               <label key={a} className={f.acts.includes(a) ? 'on' : ''}>
                 <input type="checkbox" checked={f.acts.includes(a)} onChange={() => toggle(a)} />{a}
               </label>
@@ -95,11 +102,23 @@ export default function Home() {
 
         <section>
           <h2>4. Root cause analysis</h2>
-          <select value={f.rca} onChange={(e) => set('rca', e.target.value)} aria-label="RCA">
-            <option value="">Select RCA</option>
-            {rcas.map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}
-            <option value="Other">Other</option>
-          </select>
+          <div className="tabs" role="group" aria-label="RCA category">
+            {cats.map((c) => <button key={c.id} type="button" className={'tab' + (f.rcaCat === c.name ? ' on' : '')} aria-pressed={f.rcaCat === c.name} onClick={() => pickRcaCat(c.name)}>{c.name}</button>)}
+          </div>
+          {!rcaCat && <p className="hint">Select a category, then choose the root cause.</p>}
+          {rcaCat && !(rcaCat.rca_options || []).length && <p className="hint">No root causes added for this category yet. Use Other or add them in Manage.</p>}
+          {rcaCat && (rcaCat.rca_options || []).length > 0 && (
+            <input className="search" type="search" placeholder="Search root causes..." aria-label="Search root causes" value={rcaQ} onChange={(e) => setRcaQ(e.target.value)} />
+          )}
+          {rcaCat && (
+            <div className="checks">
+              {[...(rcaCat.rca_options || []).filter((r) => r.toLowerCase().includes(rcaQ.toLowerCase())), 'Other'].map((r) => (
+                <label key={r} className={f.rca === r ? 'on' : ''}>
+                  <input type="radio" name="rca" checked={f.rca === r} onChange={() => set('rca', r)} />{r}
+                </label>
+              ))}
+            </div>
+          )}
           {f.rca === 'Other' && (<><label htmlFor="ro">Enter RCA</label><input id="ro" value={f.rcaOther} onChange={(e) => set('rcaOther', e.target.value)} /></>)}
         </section>
 
@@ -107,7 +126,7 @@ export default function Home() {
           <h2>5. Status &amp; remarks</h2>
           <label htmlFor="st">Status</label>
           <select id="st" value={f.statusMode} onChange={(e) => set('statusMode', e.target.value)}>
-            <option value="auto">Automatic</option>
+            <option value="auto">SELECT</option>
             {STATUSES.map((s) => <option key={s}>{s}</option>)}
           </select>
           <p className="hint">Suggested status: <span className="badge">{suggested}</span></p>
@@ -124,7 +143,7 @@ export default function Home() {
             <button className="btn solid" onClick={copy}>COPY REPORT</button>
             <button className="btn" onClick={generate}>REGENERATE REPORT</button>
             <button className="btn" onClick={() => setOut('')}>CLEAR REPORT</button>
-            <button className="btn danger" onClick={() => { setF(blank()); setOut(''); setErrs([]); }}>CLEAR FORM</button>
+            <button className="btn danger" onClick={() => { setF(blank()); setOut(''); setErrs([]); setActQ(''); setRcaQ(''); }}>CLEAR FORM</button>
           </div>
         </section>
       </main>

@@ -37,3 +37,4 @@ summary{cursor:pointer;font-weight:600}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px}
 .tab{font:700 16px system-ui;padding:10px 20px;border:2px solid var(--green);background:transparent;color:var(--green);border-radius:4px;cursor:pointer}
 .tab.on{background:var(--green);color:#fff}
+.search{margin:4px 0 8px}
